@@ -1,0 +1,9 @@
+*.rar
+datasetV1/*
+datasetV3/*
+datasetV3plus/*
+PrecisionLive/*
+**/*.jpg
+**/*.rar
+codigosPython/pipesLive/dist
+codigosPython/pipesLive/build

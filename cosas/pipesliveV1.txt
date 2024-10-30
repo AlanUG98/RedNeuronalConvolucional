@@ -1,0 +1,135 @@
+import tkinter as tk
+from tkinter import ttk
+import cv2
+from tkinter.filedialog import askdirectory
+import os
+import mediapipe as mp
+import numpy as np
+from tensorflow.keras.models import load_model
+from mediapipe.framework.formats import landmark_pb2
+from mediapipe.framework.formats import detection_pb2
+from mediapipe.python.solutions import drawing_styles as mp_drawing_styles
+
+
+
+def Grabar():
+    mp_drawing = mp.solutions.drawing_utils
+    mp_hands = mp.solutions.hands
+
+    # Configuración de la red neuronal
+    loaded_model = load_model(r'C:\Users\xatla\Desktop\TTv2\codigosPython\redNeuronalEntrenada\modelo_gestos.h5')
+
+    cap = cv2.VideoCapture(0)
+
+    contador = 0
+    img_width, img_height = 100, 100  # Dimensiones deseadas de la imagen
+
+    with mp_hands.Hands(
+            model_complexity=0,
+            min_detection_confidence=0.1,
+            min_tracking_confidence=0.5) as hands:
+
+
+
+        while cap.isOpened():
+            success, image = cap.read()
+            if not success:
+                print("Ignorando cuadro de cámara vacío.")
+                continue
+
+            copia = image.copy()
+            contador = contador + 1
+            Imagen = "Imagen_" + str(contador) + ".jpg"
+            image.flags.writeable = False
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            results = hands.process(image)
+
+            if results.multi_hand_landmarks:
+                for hand_landmarks in results.multi_hand_landmarks:
+                    all_x, all_y = [], []
+                    for hnd in mp_hands.HandLandmark:
+                        all_x.append(int(hand_landmarks.landmark[hnd].x * image.shape[1]))
+                        all_y.append(int(hand_landmarks.landmark[hnd].y * image.shape[0]))
+                    min_x, min_y = min(all_x), min(all_y)
+                    max_x, max_y = max(all_x), max(all_y)
+
+                    # Calculate the center of the hand
+                    center_x, center_y = (min_x + max_x) // 2, (min_y + max_y) // 2
+
+                    # Create a square bounding box around the center
+                    half_size = max((max_x - min_x) // 2, (max_y - min_y) // 2)
+                    min_x = center_x - half_size
+                    min_y = center_y - half_size
+                    max_x = center_x + half_size
+                    max_y = center_y + half_size
+
+                    # Ensure that the bounding box dimensions are at least 200x200
+                    if max_x - min_x < img_width:
+                        diff_x = img_width - (max_x - min_x)
+                        min_x -= diff_x // 2
+                        max_x += diff_x // 2
+
+                    if max_y - min_y < img_height:
+                        diff_y = img_height - (max_y - min_y)
+                        min_y -= diff_y // 2
+                        max_y += diff_y // 2
+
+                    # Crop and resize the image
+                    # Tamaño deseado de la imagen
+                    img_width, img_height = 100, 100
+
+                    # Crop y resize
+                    cropped_image = copia[min_y:max_y, min_x:max_x]
+                    cropped_image = cv2.resize(cropped_image, (img_width, img_height))
+
+
+                    #cropped_image = cv2.resize(cropped_image, (img_width, img_height))
+
+                    cv2.imshow('Cropped', cropped_image)
+                    cv2.imwrite(Imagen, cropped_image)
+                    # Convertir la imagen a escala de grises
+                    gray_image = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2GRAY)
+                    gray_image = np.expand_dims(gray_image, axis=-1)  # Agregar una dimensión para que coincida con el modelo
+
+                    # Normalizar la imagen
+                    gray_image = gray_image / 255.0
+
+                    # Realizar la predicción con el modelo
+                    prediction = loaded_model.predict(np.expand_dims(gray_image, axis=0))[0]
+
+
+                    # Obtener la clase predicha
+                    predicted_gesture = np.argmax(prediction)
+
+                    # Umbral para considerar la predicción válida
+                    confidence_threshold = 0.5  # Puedes ajustar este valor
+                    if prediction[predicted_gesture] > confidence_threshold:
+                        print(f'Gesto predicho: {predicted_gesture}')
+
+
+                    mp_drawing.draw_landmarks(
+                        image,
+                        hand_landmarks,
+                        mp_hands.HAND_CONNECTIONS,
+                        mp_drawing_styles.get_default_hand_landmarks_style(),
+                        mp_drawing_styles.get_default_hand_connections_style())
+
+            cv2.imshow(' Hands', cv2.flip(image, 1))
+
+            if cv2.waitKey(5) & 0xFF == 27:
+                break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+# Ventana principal
+ventana = tk.Tk()
+ventana.title("IPN-Hand detector")
+ventana.geometry('350x170')
+
+# Botón para conectar
+boton = tk.Button(ventana, text="Conectar", command=Grabar)
+boton.place(x=200, y=80)
+
+# Bucle principal de la interfaz gráfica
+ventana.mainloop()
